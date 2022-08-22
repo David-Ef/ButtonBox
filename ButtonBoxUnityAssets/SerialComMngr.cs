@@ -12,11 +12,16 @@ using Debug = UnityEngine.Debug;
 public class SerialComMngr : MonoBehaviour
 {
 
+    public bool verbose = true; 
+
     public static SerialComMngr instance;
     
     private SerialPort _serial;
+    public static string serialName => isConnected ? instance._serial.PortName : String.Empty;
+
     private List<string> _ports;
-    public bool isConnected => _serial != null && _serial.IsOpen;
+    private int _nport = 0;
+    public static bool isConnected => instance._serial != null && instance._serial.IsOpen;
 
     public byte[] lastData { private set; get; }
     public string lastMessage;
@@ -34,17 +39,41 @@ public class SerialComMngr : MonoBehaviour
 
     void Start()
     {
-        GetAvailablePorts();
-        ConnectToPort();
-        
         _stopwatch = new Stopwatch();
+        _stopwatch.Start();
+    }
 
-        if (isConnected)
+    private void Update()
+    {
+        
+        // Continuously check when was last data received
+        //    Try to reconnect if last sample is too old
+        
+        if (lastAge > 2000)
         {
-            _stopwatch.Start();
+            if (verbose) Debug.LogWarning($"[ButtonBox] Port {_ports[_nport]} has not sent any data in the last 1000ms. Switching to next port in list.");
             
-            samplingThread = new Thread(ReadFromPort);
-            samplingThread.Start();
+            _nport = ++_nport % _ports.Count;
+
+            Disconnect();
+        }
+
+        if (!isConnected)
+        {
+            GetAvailablePorts();
+            
+            // Try last port first
+            ConnectToPort(_ports.Count-_nport-1);
+
+            if (!isConnected)
+            {
+                if (verbose) Debug.LogWarning($"[ButtonBox] Could not connect to Button box on serial port {_ports[_nport]}.");
+            } else
+            {
+                _stopwatch.Restart();
+                samplingThread = new Thread(ReadFromPort);
+                samplingThread.Start();
+            }
         }
     }
 
@@ -55,17 +84,12 @@ public class SerialComMngr : MonoBehaviour
             int bytesToRead = _serial.BytesToRead;
             if (bytesToRead > 0)
             {
-                // byte[] buff = new byte[bytesToRead];
-                string read = _serial.ReadLine();//(buff, 0, bytesToRead);
+                string read = _serial.ReadLine();
                 if (read != String.Empty)
                 {
                     lastMessage = read;
                     _stopwatch.Restart();
                 }
-                // if (read > 0)
-                // {
-                //     lastData = buff;
-                // }
             }
         }
     }
@@ -81,18 +105,21 @@ public class SerialComMngr : MonoBehaviour
             // print(port_name);
 #if PLATFORM_STANDALONE_LINUX || UNITY_EDITOR_LINUX
             if (port_name.Substring(8, port_name.Length - 9) == "USB")
+#else
+            if (port_name.Substring(0, 3) == "COM")
+#endif
             {
                 _ports.Add(port_name);
             }
-#else
-            Debug.LogError("Code for windows not implemented yet");
-#endif
         }
     }
 
-    public void ConnectToPort()
+    public void ConnectToPort(int nport)
     {
-        string port = _ports[0];
+        string port = _ports[nport];
+        
+        if (verbose) print($"[ButtonBox] Trying to connect to serial port {port} ({nport+1} / {_ports.Count})");
+        
         Disconnect();
 
         try
@@ -104,11 +131,11 @@ public class SerialComMngr : MonoBehaviour
             };
             _serial.Open();
 
-            print($"Connected to {port}");
+            if (verbose) print($"[ButtonBox] Connected to serial port {port}.");
         }
         catch (Exception e)
         {
-            Debug.LogWarning(e.Message);
+            Debug.LogWarning($"[ButtonBox] {e.Message}");
         }
     }
 
@@ -116,17 +143,18 @@ public class SerialComMngr : MonoBehaviour
     {
         if (_serial != null)
         {
+            string serialName = _serial.PortName;
             // close the connection if it is open
             if (isConnected)
             {
                 _serial.Close();
             }
 
-            // release any resources being used
+            // release any resources used
             _serial.Dispose();
             _serial = null;
 
-            Debug.Log("Disconnected");
+            if (verbose) Debug.Log($"[ButtonBox] Disconnected from serial port {serialName}");
         }
     }
 

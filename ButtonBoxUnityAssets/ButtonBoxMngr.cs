@@ -1,8 +1,5 @@
 ﻿using System;
-using System.Linq;
-using System.Text;
 using UnityEngine;
-using UnityEngine.Networking;
 
 [RequireComponent(typeof(SerialComMngr))]
 public class ButtonBoxMngr : MonoBehaviour
@@ -11,7 +8,7 @@ public class ButtonBoxMngr : MonoBehaviour
     public static ButtonBoxMngr instance;
     
     private SerialComMngr _serialComMngr;
-    public bool isReady => _serialComMngr.isConnected;
+    public bool isReady => SerialComMngr.isConnected;
 
     public bool isLeftButtonPressed { private set; get; }
     public bool isRightButtonPressed { private set; get; }
@@ -59,8 +56,8 @@ public class ButtonBoxMngr : MonoBehaviour
         // string[] data = rawData.Split('\n').First().Split('-');
         string[] data = _serialComMngr.lastMessage.Split('-');
 
-        bool newLeftButtonState = data[0] == "0";
-        bool newRightButtonState = data[1] == "0";
+        bool newLeftButtonState = data[1] == "0";
+        bool newRightButtonState = data[0] == "0";
 
         if (newLeftButtonState != isLeftButtonPressed)
         {
@@ -93,6 +90,8 @@ public class ButtonBoxMngr : MonoBehaviour
         isLeftButtonPressed = newLeftButtonState;
         isRightButtonPressed = newRightButtonState;
         
-        sliderValue = float.Parse(data[2].Trim());
+        sliderValue = 1f-float.Parse(data[2].Trim());
+
+//        print($"l {isLeftButtonPressed}, r {isRightButtonPressed}, {sliderValue}");
     }
 }
